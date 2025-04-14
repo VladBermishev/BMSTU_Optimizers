@@ -57,9 +57,21 @@ function hess(func, x; eps=1e-6)
             next_x_ij = copy(x)
             next_x_ij[i] += eps
             next_x_ij[j] += eps
-            result[i,j] = (func(next_x_ij) - func(next_x_j) - func(next_x_j) + func(x))/eps^2 
+            result[i,j] = (func(next_x_ij) - func(next_x_j) - func(next_x_j) + func(x))/eps^2
         end
     end
+    return result
+end
+
+function hess_2d(func, x; eps=[1e-6,1e-6])
+    __sz = length(x)
+    result = zeros(__sz, __sz)
+    eps1 = [eps[1], 0]
+    eps2 = [0, eps[2]]
+    result[1,1] = (func(x + eps1) - 2*func(x) + func(x-eps1))/eps[1]^2
+    result[1,2] = (func(x + eps) - func(x + eps1 - eps2) - func(x - eps1 + eps2) + func(x-eps))/4*eps[1]*eps[2]
+    result[2,1] = result[1,2]
+    result[2,2] = (func(x + eps2) - 2*func(x) + func(x - eps2))/eps[2]^2
     return result
 end
 
@@ -125,7 +137,7 @@ function search_unimodal_segment(f, a, b, N=1000)
         end
     end
     if result_end == nothing || result_start == nothing
-        return interval_start, interval_end    
+        return interval_start, interval_end
     end
     if (interval_end - interval_start) > (result_end - result_start)
         result_start, result_end = interval_start, interval_end
@@ -237,7 +249,7 @@ function function_min_fib(f, a, b, n, eps=1.e-6)
     return (a + b) / 2, dots, error, iter
 end
 #%%
-function sven_localization(f, x_0, h = 0.01)
+function sven_localization(f, x_0; h = 1e-2)
     x_i = []
     x_0 = copy(x_0)
     push!(x_i, x_0)
@@ -260,23 +272,23 @@ function sven_localization(f, x_0, h = 0.01)
     else
         return minmax(x_i[end], x_i[lastindex(x_i) - 1])
     end
-    
+
 end
 
 function one_dim_optimize(f, x_0=0.0)
     a, b = sven_localization(f, x_0)
-    x_opt = function_min_dyhotomy_impl(f, a, b) 
+    x_opt = function_min_dyhotomy_impl(f, a, b)
     return x_opt
 end
 
 function one_dim_optimize_test(f, x_0=0.0)
     a = 0
     b = 2*x_0
-    x_opt = function_min_dyhotomy_impl(f, a, b) 
+    x_opt = function_min_dyhotomy_impl(f, a, b)
     return x_opt
 end
 
-function coordinate_descent(f, x_0, h_0, eps = 1e-18)
+function coordinate_descent(f, x_0, h_0, eps = 1e-6)
     alpha = h_0
     x = [x_0]
     k = 0
@@ -308,8 +320,8 @@ function coordinate_descent(f, x_0, h_0, eps = 1e-18)
             push!(x, x_min)
         else
             alpha = alpha * 0.5
-        end   
-        
+        end
+
         if length(x) > 1 && norm(x[end] - x[end-1]) < eps
             break
         end
@@ -325,7 +337,7 @@ function hooke_jeeves_method(f, x_0, h_0, eps = 1e-18)
     while true
         x_min = copy(x[end])
         k += 1
-        
+
         if points_added > 0 && points_added == 3
             points_added = 1
             x0 = copy(x[lastindex(x) - 2])
@@ -333,8 +345,8 @@ function hooke_jeeves_method(f, x_0, h_0, eps = 1e-18)
             x2 = copy(x[end])
             x_min = 2*x2-x0
             push!(x, x_min)
-        end        
-            
+        end
+
         for i in 1:length(x_0)
             x_i_new_1 = x[end][i] + alpha
             x_i_new_2 = x[end][i] - alpha
@@ -348,20 +360,20 @@ function hooke_jeeves_method(f, x_0, h_0, eps = 1e-18)
                 x_min = copy(x_candidate)
             end
         end
-        
+
         if norm(x_min - x[end]) < eps
             break
         end
         if f(x_min) < f(x[end])
             push!(x, x_min)
-            points_added+=1 
+            points_added+=1
         else
-            alpha *= 0.5 
-        end   
+            alpha *= 0.5
+        end
         if length(x) > 1 && norm(x[end] - x[end-1]) < eps
             break
         end
-        
+
     end
     return x[end], k, x
 end
@@ -370,15 +382,15 @@ function Gauss_Zeidel(f, x_0, h_0, eps = 1e-18)
     alpha = h_0
     x = [x_0]
     k = 0
-    while true 
+    while true
         k += 1
         x_min = copy(x[end])
         for i in 1:length(x_0)
             x_candidate = copy(x[end])
-            
+
             e_k = zeros(length(x_0))
             e_k[i] = x_candidate[i] / norm(x_candidate)
-        
+
             g(a) = f(x_candidate + a*e_k)
             alpha_new = one_dim_optimize(g, alpha)
             x_new_i_1 = x_candidate + alpha_new * e_k
@@ -437,7 +449,7 @@ function simplex_method(f, eps=1e-18, max_iter=1000)
 end
 
 # отражение, сжатие, растяжение
-function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
+function nelder_mead(f; eps=1e-6, max_iter=1000, alpha=1, beta=0.5, gamma=2)
     x = [ [0.0, 0.0], [(sqrt(3)+1)/(2*sqrt(2)), (sqrt(3)-1)/(2*sqrt(2))], [(sqrt(3)-1)/(2*sqrt(2)), (sqrt(3)+1)/(2*sqrt(2))]]
     trajectory = []
     mid = []
@@ -448,10 +460,10 @@ function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
     for idx in 1:max_iter
         x = sort(x, by = x->f(x), rev=true)
         push!(trajectory, x[3])
-        trajectory = vcat(trajectory, x) 
+        trajectory = vcat(trajectory, x)
         x_mid = (x[2] + x[3]) / 2
         x4 = x_mid + alpha * (x_mid - x[1])
-        
+
         push!(mid, x_mid)
         push!(x_4, x4)
         push!(trac, x[1], x4)
@@ -461,7 +473,7 @@ function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
             # Значение в отображенной точке (x4) меньше наилучшего из x
             # Растягиваем симлекс с gamma = 2
             x5 = gamma * x4 + (1 - gamma) * x_mid
-            x[1] = (f(x5) < f(x4)) ? x5 : x4 
+            x[1] = (f(x5) < f(x4)) ? x5 : x4
             push!(x_5, x5)
             push!(trac, x[1], x5)
         else
@@ -474,7 +486,7 @@ function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
                     # Значение в отображенной точке x4 больше среднего, но меньше наихудшего x1
                     x[1] = x4
                 end
-                
+
                 x = sort(x, by = x->f(x), rev=true)
                 x5 = (x[1] +  x_mid) / 2
                 if f(x5) < f(x[1])
@@ -487,7 +499,7 @@ function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
                 end
 
                 push!(x_5, x5)
-                push!(trac, x[1], x5)   
+                push!(trac, x[1], x5)
             end
         end
         sort(x, by = x->f(x), rev=true)
@@ -497,12 +509,12 @@ function nelder_mead(f, eps=1e-18, max_iter=1000, alpha=1, beta=0.5, gamma=2)
         end
         iterations = idx
     end
-    
+
     return x[3], iterations, trajectory, mid, trac, x_4, x_5
 end
 
-function grad_descent(func, x0, alpha = 0.1, eps=1e-18, max_iter=1e3, func_eps=1e-18, grad_eps=1e-18)
-    descent_rate = alpha  
+function grad_descent(func, x0, alpha = 0.1, eps=1e-5, max_iter=1e3, func_eps=1e-4, grad_eps=1e-6)
+    descent_rate = alpha
     iterations = 0
     points = []
     push!(points, x0)
@@ -510,7 +522,7 @@ function grad_descent(func, x0, alpha = 0.1, eps=1e-18, max_iter=1e3, func_eps=1
         x = copy(points[end])
         gradient = grad(func, x)
         next_x = x - descent_rate * gradient
-        if norm(next_x - x) <= eps || abs(func(next_x)-func(x)) <= func_eps || norm(gradient) <= grad_eps
+        if norm(next_x - x) <= eps || abs(func(next_x)-func(x)) <= func_eps || norm(gradient) <= grad_eps || descent_rate < eps
             break
         end
         if func(next_x) < func(x)
@@ -518,13 +530,13 @@ function grad_descent(func, x0, alpha = 0.1, eps=1e-18, max_iter=1e3, func_eps=1
         else
             descent_rate /= 2
         end
-        iterations+=1 
+        iterations+=1
     end
     return points[end], iterations, points
 end
 #%%
 function fast_grad_descent(func, x0; alpha = 0.1, eps=1e-5, max_iter=1e3, func_eps=1e-4, grad_eps=1e-6)
-    descent_rate = alpha  
+    descent_rate = alpha
     iterations = 0
     points = []
     push!(points, x0)
@@ -532,19 +544,19 @@ function fast_grad_descent(func, x0; alpha = 0.1, eps=1e-5, max_iter=1e3, func_e
         x = copy(points[end])
         gradient = grad(func, x, eps=1e-7)
         g(a) = func(x - a*gradient)
-        descent_rate = one_dim_optimize(g, descent_rate)
+        descent_rate = one_dim_optimize_test(g, descent_rate)
         next_x = x - descent_rate * gradient
         if norm(next_x - x) <= eps || norm(gradient) <= grad_eps || abs(func(x) - func(next_x)) <= func_eps
             break
         end
         push!(points, next_x)
-        iterations+=1 
+        iterations+=1
     end
     return points[end], iterations, points
 end
 
 function conj_grad_descent(func, x0; alpha = 0.1, eps=1e-5, max_iter=1e3, func_eps=1e-4, grad_eps=1e-6)
-    descent_rate = alpha  
+    descent_rate = alpha
     iterations = 0
     points = []
     push!(points, x0)
@@ -560,18 +572,18 @@ function conj_grad_descent(func, x0; alpha = 0.1, eps=1e-5, max_iter=1e3, func_e
         push!(points, next_x)
         new_grad = grad(func, next_x)
         conj = new_grad + norm(new_grad)^2/norm(grad(func, x))^2 * conj
-        iterations+=1 
+        iterations+=1
     end
     return points[end], iterations, points
 end
 #%%
-function NewtonMethod(func, x0, eps=1.e-6, max_iter=1000)
+function NewtonMethod(func, x0; eps=1.e-6, max_iter=1000)
     x = x0
     iterations = 0
     path = [x0]
     for idx in 1:max_iter
         iterations+=1
-        x = x - inv(hess(func, x, eps=1e-7)) * grad(func, x, eps=1e-7)
+        x = x - inv(hess_2d(func, x, eps=[1e-7,1e-7])) * grad(func, x, eps=1e-7)
         push!(path, x)
         if norm(grad(func, x)) < eps
             break
@@ -621,7 +633,7 @@ end
 function square_approx(x0, x1, x2, y0, y1, y2)
     a0 = y0
     a1 = (y1 - y0) / (x1 - x0)
-    a2 = 1 / (x2 - x1) * ((y2 - y0) / (x2 - x0) - (y1 - y0) / (x1 - x0)) 
+    a2 = 1 / (x2 - x1) * ((y2 - y0) / (x2 - x0) - (y1 - y0) / (x1 - x0))
     return (x1 + x0) / 2 - a1 / (2 * a2)
 end
 
@@ -637,7 +649,7 @@ function Powell(func, x0, eps=1e-18, max_iter = 100, deltas=[0.1,0.1])
         for cord in 1:length(x0)
             x_opt = copy(x[1])
             x[2][cord] = x[1][cord] + deltas[cord]
-            y[1] = func(x[1])   
+            y[1] = func(x[1])
             y[2] = func(x[2])
             if y[1] > y[2]
                 x[3][cord] = x[1][cord] + 2 * deltas[cord]
@@ -650,7 +662,7 @@ function Powell(func, x0, eps=1e-18, max_iter = 100, deltas=[0.1,0.1])
             x_min = x[y_min_idx]
             push!(path, best_x)
             if func(x_min) < func(x_opt)
-                best_x = x_min    
+                best_x = x_min
             else
                 best_x = x_opt
             end
@@ -659,16 +671,16 @@ function Powell(func, x0, eps=1e-18, max_iter = 100, deltas=[0.1,0.1])
         iterations += 1
         if norm(x_opt - x_min) < eps
             break
-        end 
+        end
     end
-    
+
     return x_min, iterations, path
 end
 #%%
 using Optim
 function multicriteria_search(func, x0; n=10, eps1 = 1e-5, eps2 = 1e-5, max_iter=1000)
     iterations = 0
-    points_diff = [0, 0]
+    points_diff = [0.0, 0.0]
     points = [x0]
     x = copy(x0)
     for idx in 1:max_iter
@@ -680,10 +692,12 @@ function multicriteria_search(func, x0; n=10, eps1 = 1e-5, eps2 = 1e-5, max_iter
             break
         end
         g(alpha) = func(x - alpha[1]*func_grad + alpha[2]*points_diff)
+        #alpha, _, _ = coordinate_descent(g, x0, 1e-3)
+        alpha, _, _, _, _, _, _ = nelder_mead(g)
         #alpha, _, _ =  grad_descent(g, [0.0,0.0])
         #alpha, _, _ =  fast_grad_descent(g, [0.0,0.0])
         #alpha, _, _ =  conj_grad_descent(g, x0)
-        alpha, _, _ =  NewtonMethod(g, x0)
+        #alpha, _, _ =  NewtonMethod(g, x0)
         #alpha, _, _ =  NewtonMethodWithLinearOpt(g, x0)
         #alpha, _, _ =  NewtonMethodWithStaticHess(g, x0)
         #optim_result = Optim.optimize(g, x0)
@@ -704,7 +718,7 @@ function plot_method(f, points, func_min, iterations, title)
     x = y = -5:0.1:5
     px = [points[i][1] for i in 1:length(points)]
     py = [points[i][2] for i in 1:length(points)]
-    
+
     plt = Plots.plot(size=(1000, 1000), title=title, xlim=(-5,5), ylim=(-5,5))
     Plots.plot!(plt, x, y, (x,y)->f([x,y]), st = :contour, levels=:40)
     Plots.plot!(plt, px, py, seriestype=:scatter, color = "blue")
@@ -712,7 +726,7 @@ function plot_method(f, points, func_min, iterations, title)
     Plots.plot!(plt, [func_min[1]], [func_min[2]], seriestype=:scatter, color = "red", label="min")
     Plots.plot!(plt, [], [], labels="iterations=$(iterations)")
     return plt
-end  
+end
 #%%
 function optimize_multicriteria(func, x0, title="")
     multicriteria_result, multicriteria_iterations, multicriteria_points = multicriteria_search(func, x0)
@@ -725,7 +739,7 @@ function optimize_multicriteria(func, x0, title="")
     x_vals = range(-10, 10, length=50)
     y_vals = range(-10, 10, length=50)
     Z = [func([x, y]) for x in x_vals, y in y_vals]
-    
+
     p = PlotlyJS.plot(
         [
             PlotlyJS.surface(z=Z, x=x_vals, y=y_vals, colorscale="Viridis", opacity=0.6),
@@ -749,12 +763,6 @@ optimize_multicriteria(target_rastrygin, [4.0, 4.1], "Rastrygin")
 optimize_multicriteria(target_schefill, [2.0, 2.0], "Schefill")
 #%%
 
-g(alpha) = (4-8*alpha)^2 + 100*(10-2000*alpha)^2
-a, b = sven_localization(g, 0)
-println("a, b = ($(a), $(b))")
-test_x_opt, test_points, test_error, test_iterations = function_min_dyhotomy(g, a, b, eps=1e-18)
-println("x_min = $(test_x_opt), g(x_min)=$(g(test_x_opt))")
-
 function plot_method_1d(func, min_point, points, error, iterations)
     x = range(-10, 10, length=1000)
     p = Plots.plot(x, func.(x), label="target_function")
@@ -766,3 +774,4 @@ function plot_method_1d(func, min_point, points, error, iterations)
 end
 display(plot_method_1d(g, test_x_opt, test_points, test_error, test_iterations))
 readline
+
