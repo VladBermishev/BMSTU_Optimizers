@@ -1,4 +1,4 @@
-module genetics
+module Genetics
 
     using StatsBase
     using Random
@@ -260,10 +260,10 @@ module genetics
 
     function best_gene(generation, func::genetics_function)
         result = nothing
-        best_val = typemax(typeof(generation[1][1]))
+        best_val = nothing
         for idx in eachindex(generation)
             gene_val = func.loss(generation[idx])
-            if best_val > gene_val
+            if isnothing(best_val) || best_val > gene_val
                 best_val = gene_val
                 result = generation[idx]
             end
@@ -318,5 +318,51 @@ module genetics
             end
         end
         return global_min, iterations, history
+    end
+
+    function generate_initial_population(population_size, bounds::Tuple{<:Unsigned, <:Unsigned}; DIMS=2, values_type=Int)
+        return [
+            [values_type(rand(bounds[1]:bounds[2])) for j in 1:DIMS]
+            for i in 1:population_size
+        ]
+    end
+
+    function get_default_gen_strategy()
+        return genetics_strategy(Basic, MultiDimOnePoint, MultiDimOneBit, BestHalf)
+    end
+
+    function ws_genetics_min(func::genetics_function, bounds::Tuple{<:Unsigned, <:Unsigned}, population, gen_strategy::genetics_strategy;
+                            max_iter=1000, mut_prob=0.3, values_type=UInt,
+                            domain=1, cross_points=2, verbose_every=0)
+        population_size = length(population)
+        generation = [
+            (i <= population_size ?
+                copy(population[i]) :
+                values_type.(zeros(func.DIMS)))
+            for i in 1:population_size<<1
+        ]
+        cross = create_crossover_strategy(func, bounds,
+            crossover_type=gen_strategy.crossover_type, selection_type=gen_strategy.parent_selection_type, domain=domain, cross_points=cross_points)
+        iterations = 0
+        global_min = generation[1]
+        global_min_val = nothing
+        start = now()
+        for idx in 1:max_iter
+            iterations += 1
+            crossover!(generation, cross)
+            mutate!(generation, gen_strategy.mutation_type, bounds=bounds, mut_prob=mut_prob)
+            select!(generation, func, gen_strategy.selection_type)
+            current_min, current_min_val = best_gene(generation, func)
+            if isnothing(global_min_val) || current_min_val < global_min_val
+                global_min, global_min_val = current_min, current_min_val
+            end
+            if verbose_every > 0 && iterations % verbose_every == 0
+                current = now()
+                @info "iteration: $(iterations), best_score: $(global_min_val), elapsed_time: $(current-start)"
+                flush(stdout)
+                start = current
+            end
+        end
+        return copy(generation[1:population_size]), global_min, iterations
     end
 end
